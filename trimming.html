@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>トリミング</title>
+<script>
+var baseCanvas, baseContext;            //元画像キャンバス
+var drawCanvas, drawContext;            //描画キャンバス
+var trimCanvas, trimContext;            //トリミング画像キャンバス
+var drawCanvasRect;                     //描画キャンバスの絶対座標
+var img = new Image();                  //画像
+var startX, startY, endX, endY;         //トリミングの範囲
+var mouseDown;                          //マウスボタンが押されているか
+var dashOffset = 0;                     //点線のオフセット
+var timer = null;                       //タイマー
+
+function initCanvas() {
+    //キャンバスの取得
+    baseCanvas = document.getElementById("baseCanvas"); //３つのキャンバスを用意する
+    baseContext = baseCanvas.getContext("2d");
+    drawCanvas = document.getElementById("drawCanvas");
+    drawContext = drawCanvas.getContext("2d");
+    trimCanvas = document.getElementById("trimCanvas");
+    trimContext = trimCanvas.getContext("2d");
+
+    //描画キャンバスの絶対座標を取得
+    drawCanvasRect = drawCanvas.getBoundingClientRect();        //要素の矩形情報を取得する
+}
+
+function loadPicture(e) {
+    //選択したファイルのURLを作成
+    var fileurl = URL.createObjectURL(e.files[0]);              //選択した画像ファイル
+    img.src = fileurl;
+
+    //画像読み込み後キャンバスに表示
+    img.onload = function() {
+        //元画像キャンバスのスタイルシートサイズに合わせる
+        baseCanvas.width = img.width;                           //baseCanvasのサイズ＝読み込んだ画像サイズになるが、実際の表示はスタイルシートで640×480ドットに固定される
+        baseCanvas.height = img.height;
+        //画像を描画
+        baseContext.drawImage(img, 0, 0);                       //読み込んだ画像を表示
+    }
+}
+
+function startTrim(event) {
+    //マウスボタンが押された
+    mouseDown = true;                                           //マウスボタン押下フラグをオン
+
+    //タイマー停止、描画キャンバスをクリア
+    clearInterval(timer);
+    drawContext.clearRect(0, 0, drawCanvas.width, drawCanvas.height);   //drawCanvasの横幅、高さ
+
+    //始点をセット
+    startX = event.clientX - drawCanvasRect.left;                       //drawCanvas内のマウスカーソルの座標をトリミング始点としてセット
+    startY = event.clientY - drawCanvasRect.top;
+}
+
+function drawTrim(event) {
+    //マウスボタンが押されている時トリミング範囲を描画
+    if(mouseDown) {
+        //終点をセット
+        endX = event.clientX - drawCanvasRect.left;             //drawCanvas内のマウスカーソルの座標をトリミング終点としてセット
+        endY = event.clientY - drawCanvasRect.top;
+
+        //トリミング範囲（四角形）を描画
+        drawRect();                                             //71行から定義される描画関数を実行する
+        timer = null;                                           //マウスボタンを押しながらドラッグしたというフラグ
+    }
+}
+
+function drawRect(){                                            //トリミング範囲の点線を描く関数
+    //描画キャンバスをクリア
+    drawContext.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+    //白点線、黒点線の四角形を描画
+    for (var i=0; i<2; i++) {
+        if(i==0) {
+            drawContext.lineDashOffset = dashOffset;            //点線のオフセット値。初期値は０
+            drawContext.strokeStyle = "white";                  //線の色を白（#FFFFFF)に
+        } else {
+            drawContext.lineDashOffset = dashOffset + 4;        //点線のオフセットを４行ずらす
+            drawContext.strokestyle = "black";                  //線の色を黒(#00000000）に
+        }
+        //点線の四角形
+        drawContext.beginPath();
+        drawContext.setLineDash([4, 4]);                        //線を実線4、空白4の点線にセット
+        drawContext.rect(startX, startY, endX-startX, endY-startY); //上で指定した線と色で矩形を描く
+        drawContext.stroke();
+    }
+
+    //点線のオフセットを更新
+    dashOffset++;                       //dashOffsetの値は0→7→0と繰り返す
+    if(dashOffset > 7) dashOffset = 0;
+}
+
+function endTrim(event) {
+    //マウスボタンが放された
+    mouseDown = false;                  //マウスボタン押下フラグをオフ
+
+    //トリミング範囲（点線）のアニメーション
+    if(timer == null) timer = setInterval(drawRect, 30);        //0.03秒ごとにdrawRect()関数を実行する
+}
+
+function trimImage() {
+    //トリミング始点
+    var trimX = startX;
+    var trimY = startY;
+    //値の小さい座標を始点に変更
+    if(endX < startX) trimX = endX;
+    if(endY < startY) trimY = endY;
+
+    //トリミングサイズ
+    var trimWidth = Math.abs(endX - startX);                //絶対値を求める
+    var trimHeight = Math.abs(endY - startY);
+
+    //元画像の縮尺率（640×480固定）
+    var dw = img.width/640;                                 //baseCanvas内のトリミング範囲を元画像の範囲に変換する
+    var dh = img.height/480;
+
+    //縮尺変更
+    trimX = Math.round(trimX * dw);                         //計算結果を四捨五入する
+    trimY = Math.round(trimY * dh);
+    trimWidth = Math.round(trimWidth * dw);
+    trimHeight = Math.round(trimHeight * dh);
+
+    //トリミング画像のキャンバスのサイズを変更
+    trimCanvas.width = trimWidth;
+    trimCanvas.height = trimHeight;
+
+    //画像をトリミングして描画
+    trimContext.drawImage(img, trimX, trimY, trimWidth, trimHeight, 0, 0, trimWidth, trimHeight);   //元画像、元画像の範囲、trimCanvasの範囲
+
+    //トリミング画像サイズを表示
+    document.getElementById("trimData").innerHTML = "size: "+trimWidth+"*"+trimHeight+"px"; //サイズ表示エリアのID
+}
+
+function clearImage() {
+    //トリミング画像キャンバスをクリア
+    trimContext.clearRect(0, 0, trimCanvas.width, trimCanvas.height);   //trimCanvasの横幅、高さ
+}
+
+function saveImage() {
+    //トリミング画像を名前をつけて保存（ダウンロード）
+    var filename = window.prompt("ファイル名を入力して下さい", "image.png");    //ダイアログを出してファイル名を入力する
+    if (filename != null) {
+        if(trimCanvas.msToBlob) {
+            //IE(msToBlobを使用できるブラウザ)
+            var blob = trimCanvas.msToBlob();
+            window.navigator.msSaveBlob(blob, filename);
+        } else {
+            //IE以外のブラウザ
+            var a = document.createElement('a');                //ファイル名を設定したリンクを作り強制クリックしてダウンロード、その後リンクを削除する
+            a.href = trimCanvas.toDataURL("image/png");
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    }
+}
+</script>
+<style>
+#wrapper {position: relative;}
+#baseCanvas {
+    width: 640px;
+    height: 480px;
+    border: thin solid #CCCCCC;
+    z-index: 0
+}
+#drawCanvas {
+    cursor: default;
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    z-index: 1
+}
+#trimArea {
+    position: absolute;
+    top: 0px;
+    left: 660px;
+}
+#trimCanvas {border: thin solid #CCCCCC;}
+form {
+    padding: 10px;
+    text-align: center;
+    width: 620px;
+    background-color: #CCCCCC;
+}
+</style>
+</head>
+<body onload="initCanvas()">
+<p>トリミング</p>
+<hr>
+<div id="wrapper">
+<canvas id="baseCanvas"></canvas>
+<canvas id="drawCanvas" width="640" height="480" onMouseDown="startTrim(event)"
+ onMouseMove="drawTrim(event)" onMouseUp="endTrim(event)"></canvas>
+<div id="trimArea">
+<canvas id="trimCanvas"></canvas>
+<div id="trimData">size: ---</div>
+</div>
+</div>
+<form>
+画像ファイルを選択
+<input type="file" accept="image/jpg, image/png" onchange="loadPicture(this)">
+<br><br>
+<input type="button" id="reset" value="トリミング" onClick="trimImage()">
+<input type="button" id="set" value="トリミングした画像を消す" onClick="clearImage()">
+<input type="button" id="save" value="トリミングした画像を保存する" onClick="saveImage()">
+</form>
+</body>
+</html>
+
+</body>
+
